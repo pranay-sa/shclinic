@@ -158,7 +158,7 @@ export function PatientEnrollmentDataPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
+              {rows.map((r) => (
                 <tr key={r.id}>
                   <td>{r.sr}</td>
                   <td>{r.regMonth}</td>
