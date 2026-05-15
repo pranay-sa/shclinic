@@ -1,0 +1,17 @@
+node_modules
+dist
+build
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+coverage
+.turbo
+.expo
+*.log
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+.env
+.env.*
+!.env.example

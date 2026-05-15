@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "SugarHeart Ops",
+    "slug": "sugar-heart-ops",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"]
+  }
+}

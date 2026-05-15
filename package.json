@@ -1,0 +1,21 @@
+{
+  "name": "sugar-heart-clinic-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend monorepo for Sugar & Heart Clinic healthcare ecosystem",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @shc/web",
+    "dev:mobile:patient": "npm run start --workspace @shc/mobile-patient",
+    "dev:mobile:ops": "npm run start --workspace @shc/mobile-ops",
+    "build:web": "npm run build --workspace @shc/web",
+    "lint:web": "npm run lint --workspace @shc/web",
+    "typecheck:web": "npm run typecheck --workspace @shc/web"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

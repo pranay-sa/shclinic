@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "SugarHeart Patient",
+    "slug": "sugar-heart-patient",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"]
+  }
+}
