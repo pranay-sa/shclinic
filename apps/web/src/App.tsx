@@ -14,12 +14,42 @@ import { OthersHubPage } from "@/modules/frontdesk/pages/OthersHubPage";
 import { PatientEnrollmentDataPage } from "@/modules/frontdesk/pages/PatientEnrollmentDataPage";
 import { QueueBoardPage } from "@/modules/frontdesk/pages/QueueBoardPage";
 import { RegistrationFormsDataPage } from "@/modules/frontdesk/pages/RegistrationFormsDataPage";
+import { DoctorPortalLayout } from "@/modules/doctor/layout/DoctorPortalLayout";
+import { DoctorCalendarPage } from "@/modules/doctor/pages/DoctorCalendarPage";
+import { DoctorConsultationPage } from "@/modules/doctor/pages/DoctorConsultationPage";
+import { DoctorHomePage } from "@/modules/doctor/pages/DoctorHomePage";
+import { DoctorLoginPage } from "@/modules/doctor/pages/DoctorLoginPage";
+import { DoctorPatientsPage } from "@/modules/doctor/pages/DoctorPatientsPage";
+import { DoctorPrescriptionLogPage } from "@/modules/doctor/pages/DoctorPrescriptionLogPage";
+import { LabPortalLayout } from "@/modules/lab/layout/LabPortalLayout";
+import { LabLoginPage } from "@/modules/lab/pages/LabLoginPage";
+import { LabPatientsPage } from "@/modules/lab/pages/LabPatientsPage";
+import { LabTestOrdersPage } from "@/modules/lab/pages/LabTestOrdersPage";
+import { LabWorkflowPage } from "@/modules/lab/pages/LabWorkflowPage";
 
 export function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/doctor/login" element={<DoctorLoginPage />} />
+      <Route path="/lab/login" element={<LabLoginPage />} />
+      <Route path="/doctor" element={<DoctorPortalLayout />}>
+        <Route index element={<Navigate to="/doctor/home" replace />} />
+        <Route path="home" element={<DoctorHomePage />} />
+        <Route path="calendar" element={<DoctorCalendarPage />} />
+        <Route path="patients" element={<DoctorPatientsPage />} />
+        <Route path="prescriptions" element={<DoctorPrescriptionLogPage />} />
+        <Route path="consultation" element={<DoctorConsultationPage />} />
+        <Route path="*" element={<Navigate to="/doctor/home" replace />} />
+      </Route>
+      <Route path="/lab" element={<LabPortalLayout />}>
+        <Route index element={<Navigate to="/lab/home" replace />} />
+        <Route path="home" element={<LabWorkflowPage />} />
+        <Route path="orders" element={<LabTestOrdersPage />} />
+        <Route path="patients" element={<LabPatientsPage />} />
+        <Route path="*" element={<Navigate to="/lab/home" replace />} />
+      </Route>
       <Route path="/frontdesk" element={<FrontdeskPortalLayout />}>
         <Route index element={<Navigate to="/frontdesk/home" replace />} />
         <Route path="home" element={<FrontdeskHomePage />} />

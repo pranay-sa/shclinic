@@ -8,6 +8,8 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { apiRequest } from "@/core/http";
 
 const quickActions = [
   { label: "Register Patient", icon: UserPlus },
@@ -18,6 +20,19 @@ const quickActions = [
 ];
 
 export function FrontdeskHomePage() {
+  const [stats, setStats] = useState({
+    appointmentsToday: 0,
+    totalPatients: 0,
+    labsToday: 0,
+    totalRevenue: 0
+  });
+
+  useEffect(() => {
+    apiRequest<{ appointmentsToday: number; totalPatients: number; labsToday: number; totalRevenue: number }>("/dashboard/frontdesk")
+      .then(setStats)
+      .catch(() => undefined);
+  }, []);
+
   return (
     <div className="screen-wrap">
       <div className="top-search" role="search">
@@ -43,7 +58,7 @@ export function FrontdeskHomePage() {
               <div className="stat-title">Appointments Today</div>
               <CalendarDays size={14} strokeWidth={1.8} className="stat-hicon" />
             </div>
-            <div className="stat-value">42</div>
+            <div className="stat-value">{stats.appointmentsToday}</div>
             <div className="stat-green">+ 12% from yesterday</div>
           </article>
           <article className="stat-mini-card">
@@ -59,7 +74,7 @@ export function FrontdeskHomePage() {
               <div className="stat-title">Samples Today</div>
               <Flame size={14} strokeWidth={1.8} className="stat-hicon-red" />
             </div>
-            <div className="stat-value">15</div>
+            <div className="stat-value">{stats.labsToday}</div>
             <div className="stat-muted">Home Collections: 10</div>
           </article>
           <article className="stat-mini-card">
@@ -78,7 +93,7 @@ export function FrontdeskHomePage() {
               <h3>Total Patients</h3>
               <Users size={17} strokeWidth={1.7} className="panel-icon" />
             </div>
-            <div className="big-number">1,284</div>
+            <div className="big-number">{stats.totalPatients.toLocaleString("en-IN")}</div>
             <div className="summary-breakup">
               <span>
                 Diabetic
@@ -102,7 +117,7 @@ export function FrontdeskHomePage() {
 
           <article className="panel-card">
             <h3>Total Revenue</h3>
-            <div className="revenue-number">$12,450.00</div>
+            <div className="revenue-number">₹{stats.totalRevenue.toLocaleString("en-IN")}</div>
             <div className="revenue-bar">
               <span />
             </div>

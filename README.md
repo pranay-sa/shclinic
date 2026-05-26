@@ -54,3 +54,8 @@ This repository contains a scalable frontend monorepo for the Sugar & Heart Clin
 - Add React Query for caching and optimistic updates.
 - Add test stack (Vitest + React Testing Library, Detox for mobile).
 - Add CI/CD pipelines for Vercel (web) and EAS (mobile).
+
+## Backend
+
+- API workspace: `apps/api`
+- Setup guide: `docs/backend-setup.md`

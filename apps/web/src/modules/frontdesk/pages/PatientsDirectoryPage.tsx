@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CalendarDays,
@@ -13,10 +13,11 @@ import {
   Users,
   X
 } from "lucide-react";
+import { apiRequest } from "@/core/http";
 
 type Modal = "none" | "create" | "registration";
 
-const tableRows = [
+const defaultRows = [
   {
     id: "PT-8821",
     name: "Sarah Montgomery",
@@ -79,8 +80,40 @@ const registrationRows = [
 export function PatientsDirectoryPage() {
   const [modal, setModal] = useState<Modal>("none");
   const [regSelected, setRegSelected] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tableRows, setTableRows] = useState(defaultRows);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const regAny = useMemo(() => Object.values(regSelected).some(Boolean), [regSelected]);
+
+  useEffect(() => {
+    apiRequest<{
+      items: Array<{
+        id: string;
+        patient_code: string;
+        first_name: string;
+        last_name: string;
+        mobile: string;
+        gender: string;
+        date_of_birth: string;
+      }>;
+    }>(`/patients?search=${encodeURIComponent(searchQuery)}&page=1&pageSize=20`)
+      .then((resp) => {
+        setTableRows(
+          resp.items.map((item, index) => ({
+            id: item.patient_code,
+            name: `${item.first_name} ${item.last_name}`,
+            phone: item.mobile,
+            age: String(Math.max(0, new Date().getFullYear() - new Date(item.date_of_birth).getFullYear())),
+            type: item.gender,
+            date: item.date_of_birth,
+            initials: `${item.first_name[0] ?? ""}${item.last_name[0] ?? ""}`.toUpperCase(),
+            hue: (["mint", "sky", "lav"] as const)[index % 3]
+          }))
+        );
+      })
+      .catch(() => undefined);
+  }, [searchQuery, refreshKey]);
 
   return (
     <div className="screen-wrap calendar-screen doc-pat-screen patpage-wrap">
@@ -126,7 +159,7 @@ export function PatientsDirectoryPage() {
       <div className="patpage-toolbar">
         <div className="patpage-search">
           <Search size={17} strokeWidth={2} aria-hidden />
-          <input placeholder="Search by name or ID..." />
+          <input placeholder="Search by name or ID..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
         <button type="button" className="patpage-filter">
           <SlidersHorizontal size={16} />
@@ -221,9 +254,27 @@ export function PatientsDirectoryPage() {
                 <h2 className="patpage-create-title">Create Patient</h2>
                 <form
                   className="patpage-create-form"
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault();
+                    const form = e.currentTarget;
+                    const formData = new FormData(form);
+                    const firstName = String(formData.get("firstName") ?? "");
+                    const lastName = String(formData.get("lastName") ?? "");
+                    const mobile = String(formData.get("mobile") ?? "");
+                    const dob = String(formData.get("dob") ?? "1990-01-01");
+                    const genderInput = String(formData.get("gender") ?? "Female");
+                    await apiRequest("/patients", {
+                      method: "POST",
+                      body: {
+                        firstName,
+                        lastName,
+                        gender: genderInput,
+                        dateOfBirth: dob,
+                        mobile
+                      }
+                    });
                     setModal("none");
+                    setRefreshKey((v) => v + 1);
                   }}
                 >
                   <div className="patpage-form-grid patpage-form-3">
@@ -236,17 +287,17 @@ export function PatientsDirectoryPage() {
                     <label className="patpage-lbl">
                       Gender <span className="patpage-req">*</span>
                     </label>
-                    <input className="popup-field" placeholder="Fatima" required />
-                    <input className="popup-field" placeholder="Khan" required />
+                    <input className="popup-field" placeholder="Fatima" required name="firstName" />
+                    <input className="popup-field" placeholder="Khan" required name="lastName" />
                     <div className="patpage-radios">
                       <label>
-                        <input type="radio" name="gender" defaultChecked /> Female
+                        <input type="radio" name="gender" value="Female" defaultChecked /> Female
                       </label>
                       <label>
-                        <input type="radio" name="gender" /> Male
+                        <input type="radio" name="gender" value="Male" /> Male
                       </label>
                       <label>
-                        <input type="radio" name="gender" /> Other
+                        <input type="radio" name="gender" value="Other" /> Other
                       </label>
                     </div>
                   </div>
@@ -265,11 +316,11 @@ export function PatientsDirectoryPage() {
                     </label>
                     <div className="patpage-field-ico">
                       <Phone size={14} />
-                      <input placeholder="+91 1212093000" />
+                      <input placeholder="+91 1212093000" name="mobile" />
                     </div>
                     <div className="patpage-field-ico">
                       <CalendarDays size={14} />
-                      <input placeholder="DD/MM/YYYY" />
+                      <input placeholder="1990-01-01" name="dob" />
                     </div>
                     <input className="popup-field" placeholder="34" />
                     <div className="patpage-field-ico">

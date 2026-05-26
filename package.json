@@ -8,12 +8,14 @@
     "packages/*"
   ],
   "scripts": {
+    "dev:api": "npm run dev --workspace @shc/api",
     "dev:web": "npm run dev --workspace @shc/web",
     "dev:mobile:patient": "npm run start --workspace @shc/mobile-patient",
     "dev:mobile:ops": "npm run start --workspace @shc/mobile-ops",
     "build:web": "npm run build --workspace @shc/web",
     "lint:web": "npm run lint --workspace @shc/web",
-    "typecheck:web": "npm run typecheck --workspace @shc/web"
+    "typecheck:web": "npm run typecheck --workspace @shc/web",
+    "db:init:api": "npm run db:init --workspace @shc/api"
   },
   "engines": {
     "node": ">=20.0.0"

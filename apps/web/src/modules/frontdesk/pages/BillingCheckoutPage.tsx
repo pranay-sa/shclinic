@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Beaker,
@@ -15,6 +15,7 @@ import {
   UserRound,
   Wallet
 } from "lucide-react";
+import { apiRequest } from "@/core/http";
 
 type CartLine = {
   id: string;
@@ -52,13 +53,7 @@ const defaultLines: CartLine[] = [
   }
 ];
 
-const patientResults = [
-  { id: "p1", name: "Emily Rodriguez", meta: "28 Yrs, Female • +91 98200 11223", initials: "ER" },
-  { id: "p2", name: "James Wilson", meta: "41 Yrs, Male • +91 98190 33445", initials: "JW" },
-  { id: "p3", name: "Olivia Brown", meta: "33 Yrs, Female • +91 98210 55667", initials: "OB" },
-  { id: "p4", name: "William Taylor", meta: "52 Yrs, Male • +91 98330 77889", initials: "WT" },
-  { id: "p5", name: "Sophia Martinez", meta: "29 Yrs, Female • +91 98765 99001", initials: "SM" }
-];
+type PatientLookup = { id: string; name: string; meta: string; initials: string };
 
 type PayMode = "card" | "upi" | "cash";
 
@@ -76,6 +71,36 @@ export function BillingCheckoutPage() {
   });
   const [coinInput, setCoinInput] = useState("50");
   const [payMode, setPayMode] = useState<PayMode>("card");
+  const [patientResults, setPatientResults] = useState<PatientLookup[]>([]);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [paymentDone, setPaymentDone] = useState(false);
+
+  useEffect(() => {
+    apiRequest<{
+      items: Array<{
+        id: string;
+        first_name: string;
+        last_name: string;
+        mobile: string;
+        gender: string;
+        date_of_birth: string;
+      }>;
+    }>("/patients?page=1&pageSize=20")
+      .then((resp) => {
+        const mapped = resp.items.map((p) => ({
+          id: p.id,
+          name: `${p.first_name} ${p.last_name}`,
+          meta: `${p.gender} • ${p.mobile}`,
+          initials: `${p.first_name[0] ?? ""}${p.last_name[0] ?? ""}`.toUpperCase()
+        }));
+        setPatientResults(mapped);
+        if (mapped[0]) {
+          setPatient({ name: mapped[0].name, meta: mapped[0].meta, initials: mapped[0].initials });
+          setSelectedPatientId(mapped[0].id);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.price * l.qty, 0), [lines]);
   const discount = 50;
@@ -134,6 +159,7 @@ export function BillingCheckoutPage() {
                       className="bill-co-dd-item"
                       onClick={() => {
                         setPatient({ name: p.name, meta: p.meta, initials: p.initials });
+                        setSelectedPatientId(p.id);
                         setPatientQuery("");
                         setPatientOpen(false);
                       }}
@@ -244,9 +270,26 @@ export function BillingCheckoutPage() {
             </div>
           </section>
 
-          <button type="button" className="bill-co-primary">
+          <button
+            type="button"
+            className="bill-co-primary"
+            onClick={async () => {
+              if (!selectedPatientId) return;
+              await apiRequest("/billing/checkout", {
+                method: "POST",
+                body: {
+                  patientId: selectedPatientId,
+                  lines: lines.map((line) => ({ title: line.title, qty: line.qty, price: line.price })),
+                  discount,
+                  coins: coinsApplied,
+                  paymentMode: payMode
+                }
+              });
+              setPaymentDone(true);
+            }}
+          >
             <CheckCircle2 size={20} strokeWidth={2} />
-            Payment confirmed
+            {paymentDone ? "Payment confirmed" : "Confirm payment"}
           </button>
           <button type="button" className="bill-co-secondary">
             <Printer size={18} strokeWidth={2} />

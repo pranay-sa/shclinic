@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ChevronDown, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { apiRequest } from "@/core/http";
+import { authStore } from "@/core/auth";
 
 function LoginBrandLogo() {
   return (
@@ -20,6 +22,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const usernameOk = username.trim().length >= 3;
   const passwordOk = password.trim().length >= 8;
@@ -49,13 +52,29 @@ export function LoginPage() {
         onSubmit={(event) => {
           event.preventDefault();
           setSubmitAttempted(true);
-          if (canLogin) {
-            navigate("/frontdesk/home");
-          }
+          setErrorMessage(null);
+          if (!canLogin) return;
+          apiRequest<{ accessToken: string; user: { id: string; fullName: string; role: "frontdesk_exec"; clinicIds: string[] } }, { username: string; password: string; clinicCode: string }>(
+            "/auth/login",
+            {
+              method: "POST",
+              body: {
+                username,
+                password,
+                clinicCode: clinic
+              }
+            }
+          )
+            .then((session) => {
+              authStore.setSession(session.accessToken, session.user);
+              navigate("/frontdesk/home");
+            })
+            .catch(() => setErrorMessage("Invalid username, password, or clinic."));
         }}
         noValidate
       >
         <h2 className="login-card-title">Clinic Log in</h2>
+        {errorMessage ? <p className="login-field-label">{errorMessage}</p> : null}
 
         <label className="login-field">
           <span className="login-field-label">Select Clinic</span>
