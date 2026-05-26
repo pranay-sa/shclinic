@@ -122,7 +122,14 @@ app.get("/api/dashboard/frontdesk", async (req: AuthedRequest, res) => {
 app.get("/api/dashboard/doctor", async (req: AuthedRequest, res) => {
   const clinicId = req.auth!.clinicId;
   const doctorId = req.auth!.sub;
-  const rows = await db.query(
+  const rows = await db.query<{
+    appointment_code: string;
+    appointment_date: string;
+    slot_time: string;
+    status: string;
+    first_name: string;
+    last_name: string;
+  }>(
     `SELECT appointment_code, appointment_date, slot_time, status, p.first_name, p.last_name
      FROM appointments a
      JOIN patients p ON p.id = a.patient_id
@@ -131,7 +138,14 @@ app.get("/api/dashboard/doctor", async (req: AuthedRequest, res) => {
     [clinicId, doctorId]
   );
   res.json({
-    appointments: rows.rows.map((r) => ({
+    appointments: rows.rows.map((r: {
+      appointment_code: string;
+      appointment_date: string;
+      slot_time: string;
+      status: string;
+      first_name: string;
+      last_name: string;
+    }) => ({
       appointmentCode: r.appointment_code,
       date: r.appointment_date,
       time: r.slot_time,
