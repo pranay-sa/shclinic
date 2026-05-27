@@ -64,9 +64,11 @@ app.use(helmet());
 app.use(cors({ origin: env.API_CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 
-app.get("/health", async (_req, res) => {
-  await db.query("SELECT 1");
-  res.json({ ok: true, ts: new Date().toISOString() });
+app.get("/health", (_req, res) => {
+  res.json({
+    ok: true,
+    ts: new Date().toISOString()
+  });
 });
 
 app.post("/api/auth/login", async (req, res, next) => {
