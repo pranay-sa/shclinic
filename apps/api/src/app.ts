@@ -1,8 +1,11 @@
 import crypto from "node:crypto";
+import path from "node:path";
+import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
+import multer from "multer";
 import { z } from "zod";
 import { db } from "./db.js";
 import { env } from "./config.js";
@@ -121,6 +124,29 @@ const appointmentUpdateSchema = z.object({
   notes: z.string().trim().max(500).optional(),
 });
 
+const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (
+      _req: express.Request,
+      _file: Express.Multer.File,
+      cb: (error: Error | null, destination: string) => void,
+    ) => cb(null, UPLOAD_DIR),
+    filename: (
+      _req: express.Request,
+      file: Express.Multer.File,
+      cb: (error: Error | null, filename: string) => void,
+    ) => {
+      const ext = path.extname(file.originalname || "").toLowerCase();
+      const safeExt = ext && ext.length <= 8 ? ext : "";
+      cb(null, `medrec-${Date.now()}-${crypto.randomInt(1000, 9999)}${safeExt}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
 export const app = express();
 
 app.use(helmet());
@@ -136,6 +162,25 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "2mb" }));
+app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "1h", etag: true }));
+
+app.post(
+  "/api/uploads/medical-records",
+  parseAuth,
+  requireClinic,
+  upload.single("file"),
+  async (req: AuthedRequest, res) => {
+    const file = (req as unknown as AuthedRequest & { file?: Express.Multer.File }).file;
+    if (!file) return res.status(400).json({ code: "NO_FILE", message: "No file uploaded" });
+    res.status(201).json({
+      fileName: file.filename,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      url: `/uploads/${file.filename}`,
+    });
+  },
+);
 
 app.get("/health", async (_req, res) => {
   await db.query("SELECT 1");

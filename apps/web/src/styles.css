@@ -922,7 +922,8 @@ select.login-input {
 .calendar-panel {
   border: 1px solid #dce5ef;
   border-radius: 10px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -930,7 +931,8 @@ select.login-input {
 .calendar-head,
 .calendar-row {
   display: grid;
-  grid-template-columns: 168px repeat(9, 64px);
+  grid-template-columns: 168px repeat(16, 64px);
+  min-width: calc(168px + (16 * 64px));
 }
 
 .doctor-cell,
@@ -964,6 +966,7 @@ select.login-input {
   font-size: 0.79rem;
   display: grid;
   place-items: center;
+  white-space: nowrap;
 }
 
 .ghost-icon-btn {
@@ -5091,7 +5094,7 @@ select.login-input {
 .medrec-modal-upload .modal-content,
 .medrec-modal-danger .modal-content,
 .medrec-modal-vitals .modal-content {
-  padding: 18px 20px 20px;
+  padding: 14px 16px 16px;
 }
 
 .medrec-modal-apt .modal-content {
@@ -5110,7 +5113,7 @@ select.login-input {
 }
 
 .medrec-upload-sub {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   font-size: 0.82rem;
   color: #64748b;
 }
@@ -5118,16 +5121,16 @@ select.login-input {
 .medrec-cat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .medrec-cat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 14px 8px;
+  gap: 6px;
+  padding: 11px 6px;
   border-radius: 12px;
   border: 2px solid #e2e8f0;
   background: #fff;
@@ -5147,8 +5150,8 @@ select.login-input {
 .medrec-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 5px;
+  margin-bottom: 10px;
 }
 
 .medrec-field > span {
@@ -5161,7 +5164,7 @@ select.login-input {
 .medrec-input {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 8px 11px;
   font-family: inherit;
   font-size: 0.88rem;
   font-weight: 500;
@@ -5177,7 +5180,7 @@ select.login-input {
 
 .medrec-clinic-toggle button {
   border: none;
-  padding: 8px 18px;
+  padding: 7px 16px;
   font-family: inherit;
   font-size: 0.78rem;
   font-weight: 700;
@@ -5192,23 +5195,64 @@ select.login-input {
 }
 
 .medrec-drop-lbl {
-  margin: 4px 0 6px;
+  margin: 2px 0 5px;
   font-size: 0.72rem;
   font-weight: 700;
   color: #64748b;
 }
 
+.medrec-drop-input {
+  display: none;
+}
+
 .medrec-dropzone {
   border: 2px dashed #cbd5e1;
   border-radius: 12px;
-  padding: 28px 16px;
+  padding: 18px 12px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 14px;
+  gap: 4px;
+  margin-bottom: 10px;
   background: #fafafa;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.medrec-dropzone.is-dragover {
+  border-color: #0ea5e9;
+  background: #f0f9ff;
+}
+
+.medrec-dropzone.has-file {
+  background: #f8fafc;
+}
+
+.medrec-drop-preview {
+  max-height: 110px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 2px;
+}
+
+.medrec-drop-clear {
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.medrec-upload-error {
+  margin: -4px 0 8px;
+  font-size: 0.78rem;
+  color: #dc2626;
 }
 
 .medrec-drop-ico {
@@ -5229,11 +5273,11 @@ select.login-input {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 8px;
+  padding: 10px 12px;
   border-radius: 10px;
   background: #e0f2fe;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .medrec-autoid-label {
@@ -5268,8 +5312,8 @@ select.login-input {
 .medrec-modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 4px;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 .medrec-modal-actions .pill-btn {
@@ -5355,6 +5399,18 @@ select.login-input {
   border-radius: 12px;
   padding: 20px;
   min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.medrec-viewer-image {
+  max-width: 100%;
+  max-height: min(60vh, 520px);
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 8%);
 }
 
 .medrec-fake-page {

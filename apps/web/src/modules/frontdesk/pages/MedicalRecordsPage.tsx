@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import {
   Activity,
@@ -26,6 +26,8 @@ import {
   X,
   AlertTriangle
 } from "lucide-react";
+import { apiRequest } from "@/core/http";
+import { authStore } from "@/core/auth";
 
 type MedTab = "prescriptions" | "bills" | "image" | "text";
 
@@ -34,7 +36,7 @@ type UploadCategory = "prescription" | "image" | "text";
 type ModalState =
   | { type: "none" }
   | { type: "upload" }
-  | { type: "viewer"; fileName: string }
+  | { type: "viewer"; fileName: string; previewUrl?: string }
   | {
       type: "delete";
       deleteSource: "rx" | "bill" | "img" | "txt" | "simpleRx";
@@ -53,6 +55,7 @@ type RxRow = {
   rxId: string;
   source: "S&H" | "Other";
   file: string;
+  previewUrl?: string;
 };
 
 type BillRow = {
@@ -63,6 +66,7 @@ type BillRow = {
   billNo: string;
   showGenRx?: boolean;
   file: string;
+  previewUrl?: string;
 };
 
 type ImgRow = {
@@ -73,6 +77,7 @@ type ImgRow = {
   reportId: string;
   source: "S&H" | "Other";
   file: string;
+  previewUrl?: string;
 };
 
 type TxtRow = {
@@ -83,7 +88,13 @@ type TxtRow = {
   reportId: string;
   source: "S&H" | "Other";
   file: string;
+  previewUrl?: string;
 };
+
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+const UPLOAD_ACCEPT = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
+
+type ApiPatientPick = { id: string; first_name: string; last_name: string; patient_code: string };
 
 const initialRx: RxRow[] = [
   {
@@ -180,9 +191,21 @@ export function MedicalRecordsPage() {
   const [uploadDate, setUploadDate] = useState("2026-04-27");
   const [uploadClinicSh, setUploadClinicSh] = useState(true);
   const [autoId] = useState(() => genAutoId());
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [backendPatient, setBackendPatient] = useState<ApiPatientPick | null>(null);
 
   const [viewerPage, setViewerPage] = useState(1);
   const viewerTotal = 24;
+
+  useEffect(() => {
+    apiRequest<{ items: ApiPatientPick[] }>("/patients?search=&page=1&pageSize=1")
+      .then((resp) => setBackendPatient(resp.items[0] ?? null))
+      .catch(() => setBackendPatient(null));
+  }, []);
 
   useEffect(() => {
     if (modal.type === "viewer") setViewerPage(1);
@@ -193,6 +216,51 @@ export function MedicalRecordsPage() {
       setTab("prescriptions");
     }
   }, [layoutMode, tab]);
+
+  const clearUploadSelection = useCallback(() => {
+    setUploadPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setUploadFile(null);
+    setUploadError(null);
+    setIsDragOver(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  useEffect(() => {
+    if (modal.type !== "upload") clearUploadSelection();
+  }, [modal.type, clearUploadSelection]);
+
+  useEffect(() => {
+    return () => {
+      if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+    };
+  }, [uploadPreviewUrl]);
+
+  const handleUploadFile = useCallback(
+    (file: File) => {
+      setUploadError(null);
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const validExt = ["pdf", "jpg", "jpeg", "png"];
+      const validType =
+        file.type === "application/pdf" || file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/jpg";
+      if (!validExt.includes(ext) && !validType) {
+        setUploadError("Please upload PDF, JPG or PNG (max. 10MB).");
+        return;
+      }
+      if (file.size > UPLOAD_MAX_BYTES) {
+        setUploadError("File exceeds 10MB limit.");
+        return;
+      }
+      setUploadPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+      });
+      setUploadFile(file);
+    },
+    [],
+  );
 
   const [vitals, setVitals] = useState({
     height: "175",
@@ -282,24 +350,75 @@ export function MedicalRecordsPage() {
   }
 
   function saveUpload() {
-    const file =
-      uploadCat === "prescription"
-        ? `${uploadDoctor.replace(/\s+/g, "_").toLowerCase()}_rx.pdf`
-        : `${uploadReportName.replace(/\s+/g, "_").toLowerCase()}.pdf`;
+    if (!uploadFile) {
+      setUploadError("Please select a file to upload.");
+      return;
+    }
+    if (!backendPatient) {
+      setUploadError("No patient found in backend. Please create a patient first.");
+      return;
+    }
     const src = uploadClinicSh ? "S&H" : "Other";
     const id = `new-${Date.now()}`;
+    const formattedDate = new Date(uploadDate).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+
+    // Persist file + record in backend for the cloud demo
+    void (async () => {
+      try {
+        const fd = new FormData();
+        fd.append("file", uploadFile);
+        const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000/api";
+        const token = authStore.getToken();
+        const user = authStore.getUser();
+        const clinicId = user?.clinicIds?.[0] ?? null;
+        const uploadResp = await fetch(`${baseUrl}/uploads/medical-records`, {
+          method: "POST",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(clinicId ? { "X-Clinic-Id": clinicId } : {}),
+          },
+          body: fd,
+        });
+        if (!uploadResp.ok) throw new Error("Upload failed");
+        const uploaded = (await uploadResp.json()) as { fileName: string; url: string };
+
+        const recordType =
+          uploadCat === "prescription" ? "prescription" : uploadCat === "image" ? "image_report" : "text_report";
+        const title = uploadCat === "prescription" ? uploadDoctor : uploadReportName;
+        await apiRequest("/medical-records", {
+          method: "POST",
+          body: {
+            patientId: backendPatient.id,
+            recordType,
+            title,
+            source: src,
+            fileName: uploaded.fileName,
+          },
+        });
+      } catch {
+        // If backend fails, keep local demo behavior
+      }
+    })();
+
+    const file = uploadFile.name;
+    const previewUrl = uploadPreviewUrl ?? undefined;
     if (uploadCat === "prescription") {
       setRxRows((r) => [
         {
           kind: "rx",
           id,
           doctor: uploadDoctor,
-          date: new Date(uploadDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+          date: formattedDate,
           rxId: `Prescription ID — ${autoId.slice(0, 14)}`,
           source: src,
-          file
+          file,
+          previewUrl,
         },
-        ...r
+        ...r,
       ]);
       setTab("prescriptions");
     } else if (uploadCat === "image") {
@@ -308,12 +427,13 @@ export function MedicalRecordsPage() {
           kind: "image",
           id,
           title: uploadReportName,
-          date: new Date(uploadDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+          date: formattedDate,
           reportId: `Report ID — ${autoId.slice(0, 14)}`,
           source: src,
-          file
+          file,
+          previewUrl,
         },
-        ...r
+        ...r,
       ]);
       setTab("image");
     } else {
@@ -322,15 +442,21 @@ export function MedicalRecordsPage() {
           kind: "text",
           id,
           title: uploadReportName,
-          date: new Date(uploadDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+          date: formattedDate,
           reportId: `Report ID — ${autoId.slice(0, 14)}`,
           source: src,
-          file
+          file,
+          previewUrl,
         },
-        ...r
+        ...r,
       ]);
       setTab("text");
     }
+    setUploadFile(null);
+    setUploadPreviewUrl(null);
+    setUploadError(null);
+    setIsDragOver(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setModal({ type: "none" });
   }
 
@@ -473,7 +599,7 @@ export function MedicalRecordsPage() {
                         >
                           <Trash2 size={17} strokeWidth={2} />
                         </button>
-                        <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file })}>
+                        <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file, previewUrl: row.previewUrl })}>
                           <Eye size={17} strokeWidth={2} />
                         </button>
                         <button type="button" className="medrec-ico" aria-label="Download">
@@ -509,7 +635,7 @@ export function MedicalRecordsPage() {
                         >
                           <Trash2 size={17} strokeWidth={2} />
                         </button>
-                        <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file })}>
+                        <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file, previewUrl: row.previewUrl })}>
                           <Eye size={17} strokeWidth={2} />
                         </button>
                         <button type="button" className="medrec-ico" aria-label="Download">
@@ -547,7 +673,7 @@ export function MedicalRecordsPage() {
                     >
                       <Trash2 size={17} strokeWidth={2} />
                     </button>
-                    <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file })}>
+                    <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file, previewUrl: row.previewUrl })}>
                       <Eye size={17} strokeWidth={2} />
                     </button>
                     <button type="button" className="medrec-ico" aria-label="Download">
@@ -580,7 +706,7 @@ export function MedicalRecordsPage() {
                     >
                       <Trash2 size={17} strokeWidth={2} />
                     </button>
-                    <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file })}>
+                    <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file, previewUrl: row.previewUrl })}>
                       <Eye size={17} strokeWidth={2} />
                     </button>
                     <button type="button" className="medrec-ico" aria-label="Download">
@@ -613,7 +739,7 @@ export function MedicalRecordsPage() {
                     >
                       <Trash2 size={17} strokeWidth={2} />
                     </button>
-                    <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file })}>
+                    <button type="button" className="medrec-ico" aria-label="View" onClick={() => setModal({ type: "viewer", fileName: row.file, previewUrl: row.previewUrl })}>
                       <Eye size={17} strokeWidth={2} />
                     </button>
                     <button type="button" className="medrec-ico" aria-label="Download">
@@ -687,11 +813,78 @@ export function MedicalRecordsPage() {
               </div>
 
               <p className="medrec-drop-lbl">{uploadCat === "prescription" ? "Upload prescription" : "Upload file"}</p>
-              <div className="medrec-dropzone">
-                <Upload size={28} strokeWidth={2} className="medrec-drop-ico" aria-hidden />
-                <strong>Click to upload or drag and drop</strong>
-                <span>PDF, JPG or PNG (max. 10MB)</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={UPLOAD_ACCEPT}
+                className="medrec-drop-input"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) handleUploadFile(file);
+                }}
+              />
+              <div
+                className={`medrec-dropzone${isDragOver ? " is-dragover" : ""}${uploadFile ? " has-file" : ""}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setIsDragOver(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setIsDragOver(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setIsDragOver(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setIsDragOver(false);
+                  const file = event.dataTransfer.files?.[0];
+                  if (file) handleUploadFile(file);
+                }}
+              >
+                {uploadPreviewUrl ? (
+                  <img src={uploadPreviewUrl} alt="" className="medrec-drop-preview" />
+                ) : (
+                  <Upload size={24} strokeWidth={2} className="medrec-drop-ico" aria-hidden />
+                )}
+                {uploadFile ? (
+                  <>
+                    <strong>{uploadFile.name}</strong>
+                    <span>{(uploadFile.size / (1024 * 1024)).toFixed(2)} MB</span>
+                    <button
+                      type="button"
+                      className="medrec-drop-clear"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        clearUploadSelection();
+                      }}
+                    >
+                      Remove file
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <strong>Click to upload or drag and drop</strong>
+                    <span>PDF, JPG or PNG (max. 10MB)</span>
+                  </>
+                )}
               </div>
+              {uploadError ? <p className="medrec-upload-error">{uploadError}</p> : null}
 
               <div className="medrec-autoid">
                 <span className="medrec-autoid-label">AUTO-GENERATED ID</span>
@@ -722,7 +915,7 @@ export function MedicalRecordsPage() {
               <header className="medrec-viewer-head">
                 <div className="medrec-viewer-file">
                   <span className="medrec-pdf-ico" aria-hidden>
-                    PDF
+                    {modal.previewUrl ? "IMG" : "PDF"}
                   </span>
                   <span>{modal.fileName}</span>
                 </div>
@@ -730,49 +923,55 @@ export function MedicalRecordsPage() {
                   <X size={18} />
                 </button>
               </header>
-              <div className="medrec-viewer-toolbar">
-                <button type="button" className="medrec-page-nav" aria-label="Previous page" onClick={() => setViewerPage((p) => Math.max(1, p - 1))}>
-                  <ChevronLeft size={18} />
-                </button>
-                <label className="medrec-page-input">
-                  <input
-                    type="number"
-                    min={1}
-                    max={viewerTotal}
-                    value={viewerPage}
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      if (Number.isFinite(n)) setViewerPage(Math.min(viewerTotal, Math.max(1, n)));
-                    }}
-                  />
-                  <span>of {viewerTotal}</span>
-                </label>
-                <button
-                  type="button"
-                  className="medrec-page-nav"
-                  aria-label="Next page"
-                  onClick={() => setViewerPage((p) => Math.min(viewerTotal, p + 1))}
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </div>
-              <div className="medrec-viewer-canvas">
-                <div className="medrec-fake-page">
-                  <div className="medrec-fake-bar w100" />
-                  <div className="medrec-fake-bar w80" />
-                  <div className="medrec-fake-split">
-                    <div className="medrec-fake-box blue">
-                      <span className="medrec-fake-circle" />
-                    </div>
-                    <div className="medrec-fake-box green">
-                      <span className="medrec-fake-line" />
-                      <span className="medrec-fake-line" />
-                      <span className="medrec-fake-line short" />
-                    </div>
-                  </div>
-                  <div className="medrec-fake-bar w90" />
-                  <div className="medrec-fake-bar w70" />
+              {!modal.previewUrl ? (
+                <div className="medrec-viewer-toolbar">
+                  <button type="button" className="medrec-page-nav" aria-label="Previous page" onClick={() => setViewerPage((p) => Math.max(1, p - 1))}>
+                    <ChevronLeft size={18} />
+                  </button>
+                  <label className="medrec-page-input">
+                    <input
+                      type="number"
+                      min={1}
+                      max={viewerTotal}
+                      value={viewerPage}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (Number.isFinite(n)) setViewerPage(Math.min(viewerTotal, Math.max(1, n)));
+                      }}
+                    />
+                    <span>of {viewerTotal}</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="medrec-page-nav"
+                    aria-label="Next page"
+                    onClick={() => setViewerPage((p) => Math.min(viewerTotal, p + 1))}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
                 </div>
+              ) : null}
+              <div className="medrec-viewer-canvas">
+                {modal.previewUrl ? (
+                  <img src={modal.previewUrl} alt={modal.fileName} className="medrec-viewer-image" />
+                ) : (
+                  <div className="medrec-fake-page">
+                    <div className="medrec-fake-bar w100" />
+                    <div className="medrec-fake-bar w80" />
+                    <div className="medrec-fake-split">
+                      <div className="medrec-fake-box blue">
+                        <span className="medrec-fake-circle" />
+                      </div>
+                      <div className="medrec-fake-box green">
+                        <span className="medrec-fake-line" />
+                        <span className="medrec-fake-line" />
+                        <span className="medrec-fake-line short" />
+                      </div>
+                    </div>
+                    <div className="medrec-fake-bar w90" />
+                    <div className="medrec-fake-bar w70" />
+                  </div>
+                )}
               </div>
               <p className="medrec-viewer-foot">PROTECTED DOCUMENT • VIEW-ONLY MODE</p>
             </div>
