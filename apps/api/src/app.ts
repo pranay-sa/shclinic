@@ -62,6 +62,29 @@ const loginSchema = z.object({
   clinicCode: z.string().min(2),
 });
 
+function normalizeOrigin(origin: string): string {
+  return origin.replace(/\/+$/, "");
+}
+
+const explicitCorsOrigins = new Set(
+  env.API_CORS_ORIGIN.split(",")
+    .map((value) => normalizeOrigin(value.trim()))
+    .filter(Boolean),
+);
+
+function isAllowedCorsOrigin(origin: string): boolean {
+  const normalized = normalizeOrigin(origin);
+  if (explicitCorsOrigins.has(normalized)) return true;
+
+  try {
+    const parsed = new URL(normalized);
+    // Allow Vercel preview/deployment URLs for this demo app.
+    return parsed.protocol === "https:" && parsed.hostname.endsWith(".vercel.app");
+  } catch {
+    return false;
+  }
+}
+
 const patientCreateSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
@@ -101,7 +124,17 @@ const appointmentUpdateSchema = z.object({
 export const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: env.API_CORS_ORIGIN, credentials: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || isAllowedCorsOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS origin blocked: ${origin}`));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json({ limit: "2mb" }));
 
 app.get("/health", async (_req, res) => {
