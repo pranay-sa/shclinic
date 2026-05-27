@@ -1,43 +1,93 @@
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { apiRequest } from "@/core/http";
+import { authStore } from "@/core/auth";
 
-const weekHeaders = ["Mon 9", "Tue 10", "Wed 11", "Thu 12", "Fri 13"];
+type AppointmentRow = {
+  id: string;
+  appointment_code: string;
+  appointment_date: string;
+  slot_time: string;
+  status: "booked" | "in_progress" | "done" | "cancelled";
+  first_name: string;
+  last_name: string;
+};
+
 const slots = [
-  "07:00 AM",
-  "07:10 AM",
-  "07:20 AM",
-  "07:30 AM",
-  "07:40 AM",
-  "07:50 AM",
-  "08:00 AM",
-  "08:10 AM",
-  "08:20 AM",
-  "08:30 AM",
-  "08:40 AM",
-  "08:50 AM",
-  "09:00 AM",
-  "09:10 AM",
-  "09:20 AM",
-  "09:30 AM",
-  "09:40 AM",
-  "09:50 AM",
-  "10:00 AM",
-  "10:10 AM",
-  "10:20 AM"
+  "09:00",
+  "09:30",
+  "10:00",
+  "10:30",
+  "11:00",
+  "11:30",
+  "12:00",
+  "12:30",
+  "13:00",
+  "13:30",
+  "14:00",
+  "14:30",
+  "15:00",
+  "15:30",
+  "16:00",
+  "16:30",
 ];
 
-const meetings: Record<string, { label: string; kind: string }> = {
-  "0-0": { label: "John Doe - 07:00 am", kind: "done" },
-  "1-5": { label: "Jane Smith - 07:50 am", kind: "booked" },
-  "1-6": { label: "Jane Smith - 08:00 am", kind: "inprog" },
-  "2-15": { label: "Pratham Verma - 09:30 am", kind: "booked2" },
-  "2-16": { label: "Robert Brown - 09:40 am", kind: "blocked" }
-};
+function toApiDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatSlot(slot: string): string {
+  const [hour, minute] = slot.split(":");
+  const h = Number(hour);
+  const suffix = h >= 12 ? "PM" : "AM";
+  const normalized = h % 12 === 0 ? 12 : h % 12;
+  return `${String(normalized).padStart(2, "0")}:${minute} ${suffix}`;
+}
 
 export function DoctorCalendarPage() {
   const [mode, setMode] = useState<"day" | "week">("week");
   const [notes, setNotes] = useState("");
-  const noteId = useMemo(() => `Dr-332224-${new Date().getDate()}312-${notes.length || 1}`, [notes.length]);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const weekHeaders = useMemo(() => {
+    const monday = new Date(selectedDate);
+    const day = monday.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    monday.setDate(monday.getDate() + diffToMonday);
+    return Array.from({ length: 5 }, (_, index) => {
+      const value = new Date(monday);
+      value.setDate(monday.getDate() + index);
+      return value;
+    });
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const user = authStore.getUser();
+    if (!user) return;
+    const date = toApiDate(selectedDate);
+    apiRequest<AppointmentRow[]>(`/appointments?date=${date}&doctorId=${user.id}`)
+      .then(setAppointments)
+      .catch(() => setError("Unable to load doctor calendar."));
+  }, [selectedDate]);
+
+  const meetings = useMemo(() => {
+    const map = new Map<string, AppointmentRow>();
+    appointments.forEach((appointment) => {
+      map.set(appointment.slot_time.slice(0, 5), appointment);
+    });
+    return map;
+  }, [appointments]);
+
+  const dateLabel = selectedDate.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
   return (
     <div className="doctor-screen">
@@ -57,7 +107,7 @@ export function DoctorCalendarPage() {
         <section className="doctor-calendar-board">
           <header className="doctor-calendar-board-head">
             <div>
-              <h2>Dec, 2022</h2>
+              <h2>{dateLabel}</h2>
               <div className="doctor-calendar-legend">
                 <span>
                   <i className="dot booked" />
@@ -73,34 +123,54 @@ export function DoctorCalendarPage() {
                 </span>
                 <span>
                   <i className="dot blocked" />
-                  Blocked
+                  Cancelled
                 </span>
               </div>
             </div>
+            <input
+              type="date"
+              value={toApiDate(selectedDate)}
+              onChange={(e) => setSelectedDate(new Date(`${e.target.value}T00:00:00`))}
+            />
           </header>
 
           <div className="doctor-week-head">
-            {weekHeaders.map((day) => (
-              <span key={day}>{day}</span>
+            {(mode === "week" ? weekHeaders : [selectedDate]).map((day) => (
+              <span key={day.toISOString()}>{day.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</span>
             ))}
           </div>
 
           <div className="doctor-week-grid">
-            {slots.map((slot, rowIdx) => (
+            {slots.map((slot) => (
               <div key={slot} className="doctor-week-row">
-                <span>{slot}</span>
-                {weekHeaders.map((_, colIdx) => {
-                  const key = `${colIdx}-${rowIdx}`;
-                  const item = meetings[key];
+                <span>{formatSlot(slot)}</span>
+                {(mode === "week" ? weekHeaders : [selectedDate]).map((day, colIdx) => {
+                  const dayKey = toApiDate(day);
+                  const appointment = dayKey === toApiDate(selectedDate) ? meetings.get(slot) : undefined;
                   return (
-                    <div key={key} className="doctor-week-cell">
-                      {item ? <div className={`doctor-week-pill ${item.kind}`}>{item.label}</div> : null}
+                    <div key={`${dayKey}-${colIdx}-${slot}`} className="doctor-week-cell">
+                      {appointment ? (
+                        <div
+                          className={`doctor-week-pill ${
+                            appointment.status === "done"
+                              ? "done"
+                              : appointment.status === "in_progress"
+                                ? "inprog"
+                                : appointment.status === "cancelled"
+                                  ? "blocked"
+                                  : "booked"
+                          }`}
+                        >
+                          {appointment.first_name} {appointment.last_name} - {formatSlot(slot)}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
               </div>
             ))}
           </div>
+          {error ? <p className="lab-login-note">{error}</p> : null}
         </section>
 
         <aside className="doctor-notes-panel">
@@ -110,8 +180,7 @@ export function DoctorCalendarPage() {
               <Plus size={14} strokeWidth={2.3} />
             </button>
           </div>
-          <p>Note ID&nbsp;&nbsp;&nbsp;&nbsp;{noteId}</p>
-          <p>Date&nbsp;&nbsp;&nbsp;&nbsp;23-11-2025</p>
+          <p>Date {dateLabel}</p>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}

@@ -35,11 +35,12 @@ const timeGrid = [
 
 export function DoctorHomePage() {
   const [appointments, setAppointments] = useState<DashboardAppointment[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiRequest<{ appointments: DashboardAppointment[] }>("/dashboard/doctor")
       .then((resp) => setAppointments(resp.appointments))
-      .catch(() => undefined);
+      .catch(() => setError("Unable to load doctor dashboard."));
   }, []);
 
   const summaryCards = useMemo(() => {
@@ -149,6 +150,7 @@ export function DoctorHomePage() {
           </div>
         </section>
       </section>
+      {error ? <p className="lab-login-note">{error}</p> : null}
     </div>
   );
 }

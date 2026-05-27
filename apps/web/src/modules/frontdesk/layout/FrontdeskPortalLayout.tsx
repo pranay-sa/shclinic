@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   CircleHelp,
@@ -15,6 +15,7 @@ import {
   UsersRound
 } from "lucide-react";
 import { SidebarCrossLogo } from "./SidebarCrossLogo";
+import { authStore } from "@/core/auth";
 
 const sideMenu = [
   { id: "home", label: "Home", path: "/frontdesk/home", icon: Home },
@@ -58,6 +59,7 @@ function navLinkClass(item: (typeof sideMenu)[number], pathname: string) {
 
 export function FrontdeskPortalLayout() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   return (
     <div className="portal-shell">
@@ -97,7 +99,14 @@ export function FrontdeskPortalLayout() {
               <Settings size={16} strokeWidth={2} />
               Settings
             </button>
-            <button type="button" className="sidebar-pill-btn">
+            <button
+              type="button"
+              className="sidebar-pill-btn"
+              onClick={() => {
+                authStore.clear();
+                navigate("/login");
+              }}
+            >
               <LogOut size={16} strokeWidth={2} />
               Logout
             </button>

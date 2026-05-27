@@ -24,7 +24,10 @@ export function DoctorLoginPage() {
     setSubmitted(true);
     setErrorMessage(null);
     if (!canLogin) return;
-    apiRequest<{ accessToken: string; user: { id: string; fullName: string; role: "doctor"; clinicIds: string[] } }, { username: string; password: string; clinicCode: string }>(
+    apiRequest<
+      { accessToken: string; user: { id: string; fullName: string; role: "doctor" | "clinic_admin"; clinicIds: string[] } },
+      { username: string; password: string; clinicCode: string }
+    >(
       "/auth/login",
       {
         method: "POST",
@@ -32,6 +35,9 @@ export function DoctorLoginPage() {
       }
     )
       .then((session) => {
+        if (!(session.user.role === "doctor" || session.user.role === "clinic_admin")) {
+          throw new Error("Role not allowed");
+        }
         authStore.setSession(session.accessToken, session.user);
         navigate("/doctor/home");
       })
@@ -61,7 +67,6 @@ export function DoctorLoginPage() {
             >
               <option value="">Select Clinic</option>
               <option value="main">Main Clinic</option>
-              <option value="downtown">Downtown Medical Center</option>
             </select>
             <ChevronDown size={16} />
           </div>

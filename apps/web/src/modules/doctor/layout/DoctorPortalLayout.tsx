@@ -1,6 +1,7 @@
 import { CalendarDays, FileText, Home, LogOut, MapPin, UsersRound } from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { DoctorBrandLogo } from "@/modules/doctor/components/DoctorBrandLogo";
+import { authStore } from "@/core/auth";
 
 const doctorMenu = [
   { id: "home", label: "Home", path: "/doctor/home", icon: Home },
@@ -15,6 +16,7 @@ function navClass(pathname: string, path: string) {
 
 export function DoctorPortalLayout() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   return (
     <div className="doctor-shell">
@@ -40,7 +42,14 @@ export function DoctorPortalLayout() {
             <MapPin size={14} strokeWidth={2} />
             Goregaon - Mumbai
           </div>
-          <button type="button" className="doctor-sidebar-logout">
+          <button
+            type="button"
+            className="doctor-sidebar-logout"
+            onClick={() => {
+              authStore.clear();
+              navigate("/doctor/login");
+            }}
+          >
             <LogOut size={16} strokeWidth={2} />
             Logout
           </button>

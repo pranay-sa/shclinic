@@ -24,7 +24,10 @@ export function LabLoginPage() {
     setIsSubmitted(true);
     setErrorMessage(null);
     if (!canLogin) return;
-    apiRequest<{ accessToken: string; user: { id: string; fullName: string; role: "lab_technician"; clinicIds: string[] } }, { username: string; password: string; clinicCode: string }>(
+    apiRequest<
+      { accessToken: string; user: { id: string; fullName: string; role: "lab_technician" | "clinic_admin"; clinicIds: string[] } },
+      { username: string; password: string; clinicCode: string }
+    >(
       "/auth/login",
       {
         method: "POST",
@@ -32,6 +35,9 @@ export function LabLoginPage() {
       }
     )
       .then((session) => {
+        if (!(session.user.role === "lab_technician" || session.user.role === "clinic_admin")) {
+          throw new Error("Role not allowed");
+        }
         authStore.setSession(session.accessToken, session.user);
         navigate("/lab/home");
       })
@@ -65,8 +71,6 @@ export function LabLoginPage() {
             >
               <option value="">Select Clinic</option>
               <option value="main">Main Clinic</option>
-              <option value="andheri">Andheri Branch</option>
-              <option value="goregaon">Goregaon</option>
             </select>
             <ChevronDown size={16} />
           </div>

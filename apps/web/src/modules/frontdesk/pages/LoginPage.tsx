@@ -54,7 +54,10 @@ export function LoginPage() {
           setSubmitAttempted(true);
           setErrorMessage(null);
           if (!canLogin) return;
-          apiRequest<{ accessToken: string; user: { id: string; fullName: string; role: "frontdesk_exec"; clinicIds: string[] } }, { username: string; password: string; clinicCode: string }>(
+          apiRequest<
+            { accessToken: string; user: { id: string; fullName: string; role: "frontdesk_exec" | "clinic_admin"; clinicIds: string[] } },
+            { username: string; password: string; clinicCode: string }
+          >(
             "/auth/login",
             {
               method: "POST",
@@ -66,6 +69,9 @@ export function LoginPage() {
             }
           )
             .then((session) => {
+              if (!(session.user.role === "frontdesk_exec" || session.user.role === "clinic_admin")) {
+                throw new Error("Role not allowed");
+              }
               authStore.setSession(session.accessToken, session.user);
               navigate("/frontdesk/home");
             })
@@ -86,8 +92,6 @@ export function LoginPage() {
             >
               <option value="">Select Clinic</option>
               <option value="main">Main Clinic</option>
-              <option value="andheri">Andheri Branch</option>
-              <option value="goregaon">Goregaon — Mumbai</option>
             </select>
             <ChevronDown className="login-input-chevron" size={18} strokeWidth={2} aria-hidden />
           </div>

@@ -75,6 +75,29 @@ const patientCreateSchema = z.object({
   pin: z.string().optional(),
 });
 
+const appointmentCreateSchema = z.object({
+  patientId: z.string().uuid(),
+  doctorId: z.string().uuid().nullable().optional(),
+  appointmentDate: z.string().date(),
+  slotTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "slotTime must be HH:MM or HH:MM:SS"),
+  visitType: z.enum(["new", "follow_up"]).default("follow_up"),
+  notes: z.string().trim().max(500).optional(),
+});
+
+const appointmentUpdateSchema = z.object({
+  appointmentDate: z.string().date().optional(),
+  slotTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "slotTime must be HH:MM or HH:MM:SS")
+    .optional(),
+  doctorId: z.string().uuid().optional(),
+  status: z.enum(["booked", "in_progress", "done", "cancelled"]).optional(),
+  visitType: z.enum(["new", "follow_up"]).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
 export const app = express();
 
 app.use(helmet());
@@ -299,17 +322,207 @@ app.get("/api/patients/:patientId", async (req: AuthedRequest, res) => {
 app.get("/api/appointments", async (req: AuthedRequest, res) => {
   const clinicId = req.auth!.clinicId;
   const date = (req.query.date as string | undefined) ?? undefined;
+  const doctorId = (req.query.doctorId as string | undefined) ?? undefined;
   const rows = await db.query(
     `SELECT a.id, a.appointment_code, a.appointment_date, a.slot_time, a.visit_type, a.status,
-      p.id AS patient_id, p.first_name, p.last_name, u.full_name AS doctor_name
+      p.id AS patient_id, p.patient_code, p.first_name, p.last_name, p.mobile, p.gender, p.date_of_birth,
+      u.id AS doctor_id, u.full_name AS doctor_name
      FROM appointments a
      JOIN patients p ON p.id = a.patient_id
      LEFT JOIN users u ON u.id = a.doctor_id
-     WHERE a.clinic_id = $1 AND ($2::date IS NULL OR a.appointment_date = $2::date)
+     WHERE a.clinic_id = $1
+       AND ($2::date IS NULL OR a.appointment_date = $2::date)
+       AND ($3::uuid IS NULL OR a.doctor_id = $3::uuid)
      ORDER BY a.appointment_date, a.slot_time`,
-    [clinicId, date ?? null],
+    [clinicId, date ?? null, doctorId ?? null],
   );
   res.json(rows.rows);
+});
+
+app.post("/api/appointments", async (req: AuthedRequest, res, next) => {
+  try {
+    const clinicId = req.auth!.clinicId;
+    const body = appointmentCreateSchema.parse(req.body);
+
+    const patientRow = await db.query(
+      "SELECT id FROM patients WHERE id = $1 AND clinic_id = $2",
+      [body.patientId, clinicId],
+    );
+    if (!patientRow.rows[0]) {
+      return res.status(404).json({ code: "NOT_FOUND", message: "Patient not found" });
+    }
+
+    if (body.doctorId) {
+      const doctorRow = await db.query(
+        `SELECT u.id
+         FROM users u
+         JOIN user_clinics uc ON uc.user_id = u.id
+         WHERE u.id = $1
+           AND uc.clinic_id = $2
+           AND u.role = 'doctor'
+           AND u.is_active = true`,
+        [body.doctorId, clinicId],
+      );
+      if (!doctorRow.rows[0]) {
+        return res.status(400).json({ code: "INVALID_DOCTOR", message: "Doctor not available in clinic" });
+      }
+    }
+
+    const existing = await db.query(
+      `SELECT id
+       FROM appointments
+       WHERE clinic_id = $1
+         AND doctor_id IS NOT DISTINCT FROM $2::uuid
+         AND appointment_date = $3::date
+         AND slot_time = $4::time`,
+      [clinicId, body.doctorId ?? null, body.appointmentDate, body.slotTime],
+    );
+    if (existing.rows[0]) {
+      return res
+        .status(409)
+        .json({ code: "SLOT_TAKEN", message: "Selected slot is already booked" });
+    }
+
+    const appointmentCode = makeCode("APT");
+    const inserted = await db.query(
+      `INSERT INTO appointments (
+        appointment_code, clinic_id, patient_id, doctor_id, appointment_date, slot_time, visit_type, status, notes
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,'booked',$8)
+      RETURNING id, appointment_code, clinic_id, patient_id, doctor_id, appointment_date, slot_time, visit_type, status, notes, created_at`,
+      [
+        appointmentCode,
+        clinicId,
+        body.patientId,
+        body.doctorId ?? null,
+        body.appointmentDate,
+        body.slotTime,
+        body.visitType,
+        body.notes ?? null,
+      ],
+    );
+    emitClinicEvent(clinicId, "appointments.updated", {
+      action: "created",
+      appointmentId: inserted.rows[0].id,
+    });
+    res.status(201).json(inserted.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/appointments/:id", async (req: AuthedRequest, res, next) => {
+  try {
+    const clinicId = req.auth!.clinicId;
+    const body = appointmentUpdateSchema.parse(req.body);
+    if (Object.keys(body).length === 0) {
+      return res
+        .status(400)
+        .json({ code: "VALIDATION_ERROR", message: "Provide at least one field to update" });
+    }
+
+    if (body.doctorId) {
+      const doctorRow = await db.query(
+        `SELECT u.id
+         FROM users u
+         JOIN user_clinics uc ON uc.user_id = u.id
+         WHERE u.id = $1
+           AND uc.clinic_id = $2
+           AND u.role = 'doctor'
+           AND u.is_active = true`,
+        [body.doctorId, clinicId],
+      );
+      if (!doctorRow.rows[0]) {
+        return res.status(400).json({ code: "INVALID_DOCTOR", message: "Doctor not available in clinic" });
+      }
+    }
+
+    const existingAppointment = await db.query<{
+      id: string;
+      appointment_date: string;
+      slot_time: string;
+      doctor_id: string | null;
+    }>(
+      `SELECT id, appointment_date, slot_time, doctor_id
+       FROM appointments
+       WHERE clinic_id = $1 AND id = $2`,
+      [clinicId, req.params.id],
+    );
+    if (!existingAppointment.rows[0]) {
+      return res
+        .status(404)
+        .json({ code: "NOT_FOUND", message: "Appointment not found" });
+    }
+
+    const current = existingAppointment.rows[0];
+    const targetDate = body.appointmentDate ?? current.appointment_date;
+    const targetTime = body.slotTime ?? current.slot_time;
+    const targetDoctorId = body.doctorId ?? current.doctor_id;
+
+    if (body.appointmentDate || body.slotTime || body.doctorId !== undefined) {
+      const conflict = await db.query(
+        `SELECT id
+         FROM appointments
+         WHERE clinic_id = $1
+           AND id <> $2
+           AND doctor_id IS NOT DISTINCT FROM $3::uuid
+           AND appointment_date = $4::date
+           AND slot_time = $5::time`,
+        [clinicId, req.params.id, targetDoctorId, targetDate, targetTime],
+      );
+      if (conflict.rows[0]) {
+        return res
+          .status(409)
+          .json({ code: "SLOT_TAKEN", message: "Selected slot is already booked" });
+      }
+    }
+
+    const updated = await db.query(
+      `UPDATE appointments
+       SET appointment_date = COALESCE($1::date, appointment_date),
+           slot_time = COALESCE($2::time, slot_time),
+           doctor_id = COALESCE($3::uuid, doctor_id),
+           status = COALESCE($4, status),
+           visit_type = COALESCE($5, visit_type),
+           notes = COALESCE($6, notes)
+       WHERE clinic_id = $7 AND id = $8
+       RETURNING id, appointment_code, clinic_id, patient_id, doctor_id, appointment_date, slot_time, visit_type, status, notes, created_at`,
+      [
+        body.appointmentDate ?? null,
+        body.slotTime ?? null,
+        body.doctorId ?? null,
+        body.status ?? null,
+        body.visitType ?? null,
+        body.notes ?? null,
+        clinicId,
+        req.params.id,
+      ],
+    );
+    emitClinicEvent(clinicId, "appointments.updated", {
+      action: "updated",
+      appointmentId: req.params.id,
+    });
+    res.json(updated.rows[0]);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/appointments/:id", async (req: AuthedRequest, res) => {
+  const clinicId = req.auth!.clinicId;
+  const deleted = await db.query(
+    "DELETE FROM appointments WHERE clinic_id = $1 AND id = $2 RETURNING id",
+    [clinicId, req.params.id],
+  );
+  if (!deleted.rows[0]) {
+    return res
+      .status(404)
+      .json({ code: "NOT_FOUND", message: "Appointment not found" });
+  }
+  emitClinicEvent(clinicId, "appointments.updated", {
+    action: "deleted",
+    appointmentId: req.params.id,
+  });
+  res.status(204).send();
 });
 
 app.get("/api/doctors", async (req: AuthedRequest, res) => {

@@ -1,6 +1,7 @@
 import { Home, List, LogOut, MapPin, Settings, UsersRound } from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { LabBrandLogo } from "@/modules/lab/components/LabBrandLogo";
+import { authStore } from "@/core/auth";
 
 const labMenu = [
   { id: "home", label: "Home", path: "/lab/home", icon: Home },
@@ -14,6 +15,7 @@ function getLabLinkClass(path: string, pathname: string) {
 
 export function LabPortalLayout() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   return (
     <div className="lab-shell">
@@ -46,7 +48,14 @@ export function LabPortalLayout() {
             <Settings size={15} strokeWidth={2} />
             Settings
           </button>
-          <button type="button" className="lab-sidebar-btn">
+          <button
+            type="button"
+            className="lab-sidebar-btn"
+            onClick={() => {
+              authStore.clear();
+              navigate("/lab/login");
+            }}
+          >
             <LogOut size={15} strokeWidth={2} />
             Logout
           </button>

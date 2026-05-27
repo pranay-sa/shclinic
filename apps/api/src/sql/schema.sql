@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS appointments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_appointments_clinic_date ON appointments(clinic_id, appointment_date);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_appointments_slot_per_doctor
+  ON appointments(clinic_id, doctor_id, appointment_date, slot_time);
 
 CREATE TABLE IF NOT EXISTS queue_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

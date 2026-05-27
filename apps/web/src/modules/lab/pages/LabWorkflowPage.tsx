@@ -30,14 +30,15 @@ export function LabWorkflowPage() {
     pending_orders: 0,
     total_today: 0
   });
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiRequest<LabOrder[]>("/lab/orders")
       .then(setOrders)
-      .catch(() => undefined);
+      .catch(() => setError("Unable to load lab orders."));
     apiRequest<{ reports_completed: number; in_processing: number; pending_orders: number; total_today: number }>("/dashboard/lab")
       .then(setStats)
-      .catch(() => undefined);
+      .catch(() => setError("Unable to load lab dashboard stats."));
   }, []);
 
   const activeConfig = workflowTabs.find((item) => item.id === activeTab) ?? workflowTabs[0];
@@ -114,6 +115,7 @@ export function LabWorkflowPage() {
           ))}
         </aside>
       </div>
+      {error ? <p className="lab-login-note">{error}</p> : null}
     </section>
   );
 }

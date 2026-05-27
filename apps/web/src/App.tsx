@@ -26,15 +26,44 @@ import { LabLoginPage } from "@/modules/lab/pages/LabLoginPage";
 import { LabPatientsPage } from "@/modules/lab/pages/LabPatientsPage";
 import { LabTestOrdersPage } from "@/modules/lab/pages/LabTestOrdersPage";
 import { LabWorkflowPage } from "@/modules/lab/pages/LabWorkflowPage";
+import { PortalAuthGuard, PortalLoginGuard } from "@/core/routeGuards";
 
 export function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/doctor/login" element={<DoctorLoginPage />} />
-      <Route path="/lab/login" element={<LabLoginPage />} />
-      <Route path="/doctor" element={<DoctorPortalLayout />}>
+      <Route
+        path="/login"
+        element={
+          <PortalLoginGuard portal="frontdesk" homePath="/frontdesk/home">
+            <LoginPage />
+          </PortalLoginGuard>
+        }
+      />
+      <Route
+        path="/doctor/login"
+        element={
+          <PortalLoginGuard portal="doctor" homePath="/doctor/home">
+            <DoctorLoginPage />
+          </PortalLoginGuard>
+        }
+      />
+      <Route
+        path="/lab/login"
+        element={
+          <PortalLoginGuard portal="lab" homePath="/lab/home">
+            <LabLoginPage />
+          </PortalLoginGuard>
+        }
+      />
+      <Route
+        path="/doctor"
+        element={
+          <PortalAuthGuard portal="doctor" loginPath="/doctor/login">
+            <DoctorPortalLayout />
+          </PortalAuthGuard>
+        }
+      >
         <Route index element={<Navigate to="/doctor/home" replace />} />
         <Route path="home" element={<DoctorHomePage />} />
         <Route path="calendar" element={<DoctorCalendarPage />} />
@@ -43,14 +72,28 @@ export function App() {
         <Route path="consultation" element={<DoctorConsultationPage />} />
         <Route path="*" element={<Navigate to="/doctor/home" replace />} />
       </Route>
-      <Route path="/lab" element={<LabPortalLayout />}>
+      <Route
+        path="/lab"
+        element={
+          <PortalAuthGuard portal="lab" loginPath="/lab/login">
+            <LabPortalLayout />
+          </PortalAuthGuard>
+        }
+      >
         <Route index element={<Navigate to="/lab/home" replace />} />
         <Route path="home" element={<LabWorkflowPage />} />
         <Route path="orders" element={<LabTestOrdersPage />} />
         <Route path="patients" element={<LabPatientsPage />} />
         <Route path="*" element={<Navigate to="/lab/home" replace />} />
       </Route>
-      <Route path="/frontdesk" element={<FrontdeskPortalLayout />}>
+      <Route
+        path="/frontdesk"
+        element={
+          <PortalAuthGuard portal="frontdesk" loginPath="/login">
+            <FrontdeskPortalLayout />
+          </PortalAuthGuard>
+        }
+      >
         <Route index element={<Navigate to="/frontdesk/home" replace />} />
         <Route path="home" element={<FrontdeskHomePage />} />
         <Route path="calendar" element={<CalendarPage />} />

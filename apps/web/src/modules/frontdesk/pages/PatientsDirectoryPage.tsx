@@ -11,125 +11,221 @@ import {
   Search,
   SlidersHorizontal,
   Users,
-  X
+  X,
 } from "lucide-react";
 import { apiRequest } from "@/core/http";
 
 type Modal = "none" | "create" | "registration";
 
-const defaultRows = [
-  {
-    id: "PT-8821",
-    name: "Sarah Montgomery",
-    phone: "(555) 123-4567",
-    age: "77",
-    type: "Blue",
-    date: "2023-10-24",
-    initials: "SM",
-    hue: "mint"
-  },
-  {
-    id: "PT-8822",
-    name: "James Chen",
-    phone: "(555) 234-5678",
-    age: "54",
-    type: "Blue",
-    date: "2023-09-12",
-    initials: "JC",
-    hue: "sky"
-  },
-  {
-    id: "PT-8823",
-    name: "Maria Garcia",
-    phone: "(555) 876-5432",
-    age: "41",
-    type: "Blue",
-    date: "2023-11-01",
-    initials: "MG",
-    hue: "lav"
-  },
-  {
-    id: "PT-8824",
-    name: "David Okonkwo",
-    phone: "(555) 445-0099",
-    age: "62",
-    type: "Blue",
-    date: "2023-08-30",
-    initials: "DO",
-    hue: "mint"
-  },
-  {
-    id: "PT-8825",
-    name: "Elena Rossi",
-    phone: "(555) 332-1100",
-    age: "35",
-    type: "Blue",
-    date: "2023-10-05",
-    initials: "ER",
-    hue: "sky"
-  }
-];
+type ApiPatient = {
+  id: string;
+  patient_code: string;
+  first_name: string;
+  last_name: string;
+  mobile: string;
+  gender: string;
+  date_of_birth: string;
+};
+
+type TableRow = {
+  uuid: string;
+  id: string;
+  name: string;
+  phone: string;
+  age: string;
+  type: string;
+  date: string;
+  initials: string;
+  hue: "mint" | "sky" | "lav";
+};
+
+type CreatePatientFormState = {
+  firstName: string;
+  lastName: string;
+  gender: "Female" | "Male" | "Other";
+  mobile: string;
+  dob: string;
+  age: string;
+  email: string;
+  address: string;
+  city: string;
+  pin: string;
+  state: string;
+};
 
 const registrationRows = [
-  { id: "r1", name: "Fatima Khan", email: "fatima.khan@example.com", age: "34", gender: "Female", mobile: "+91 1212093000", initials: "FK", hue: "sky" },
-  { id: "r2", name: "James Patel", email: "james.patel@example.com", age: "28", gender: "Male", mobile: "+91 1212093001", initials: "JP", hue: "mint" },
-  { id: "r3", name: "Olivia Smith", email: "olivia.smith@example.com", age: "45", gender: "Female", mobile: "+91 1212093002", initials: "OS", hue: "lav" },
-  { id: "r4", name: "Noah Brown", email: "noah.brown@example.com", age: "31", gender: "Male", mobile: "+91 1212093003", initials: "NB", hue: "sky" }
+  {
+    id: "r1",
+    firstName: "Fatima",
+    lastName: "Khan",
+    email: "fatima.khan@example.com",
+    age: "34",
+    gender: "Female" as const,
+    mobile: "+91 1212093000",
+    initials: "FK",
+    hue: "sky" as const,
+    address: "BTM 2nd Stage",
+    city: "Bengaluru",
+    pin: "560076",
+    state: "Karnataka",
+  },
+  {
+    id: "r2",
+    firstName: "James",
+    lastName: "Patel",
+    email: "james.patel@example.com",
+    age: "28",
+    gender: "Male" as const,
+    mobile: "+91 1212093001",
+    initials: "JP",
+    hue: "mint" as const,
+    address: "Andheri West",
+    city: "Mumbai",
+    pin: "400053",
+    state: "Maharashtra",
+  },
+  {
+    id: "r3",
+    firstName: "Olivia",
+    lastName: "Smith",
+    email: "olivia.smith@example.com",
+    age: "45",
+    gender: "Female" as const,
+    mobile: "+91 1212093002",
+    initials: "OS",
+    hue: "lav" as const,
+    address: "Jubilee Hills",
+    city: "Hyderabad",
+    pin: "500033",
+    state: "Telangana",
+  },
 ];
+
+const initialFormState: CreatePatientFormState = {
+  firstName: "",
+  lastName: "",
+  gender: "Female",
+  mobile: "",
+  dob: "",
+  age: "",
+  email: "",
+  address: "",
+  city: "",
+  pin: "",
+  state: "",
+};
+
+function calculateAge(dateOfBirth: string): string {
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.valueOf())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const hasBirthdayPassed =
+    today.getMonth() > dob.getMonth() ||
+    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+  if (!hasBirthdayPassed) age -= 1;
+  return String(Math.max(0, age));
+}
 
 export function PatientsDirectoryPage() {
   const [modal, setModal] = useState<Modal>("none");
   const [regSelected, setRegSelected] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState("");
-  const [tableRows, setTableRows] = useState(defaultRows);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [tableRows, setTableRows] = useState<TableRow[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [formState, setFormState] = useState<CreatePatientFormState>(initialFormState);
 
   const regAny = useMemo(() => Object.values(regSelected).some(Boolean), [regSelected]);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const startIndex = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endIndex = Math.min(page * pageSize, total);
 
   useEffect(() => {
-    apiRequest<{
-      items: Array<{
-        id: string;
-        patient_code: string;
-        first_name: string;
-        last_name: string;
-        mobile: string;
-        gender: string;
-        date_of_birth: string;
-      }>;
-    }>(`/patients?search=${encodeURIComponent(searchQuery)}&page=1&pageSize=20`)
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    setListError(null);
+    apiRequest<{ items: ApiPatient[]; total: number }>(
+      `/patients?search=${encodeURIComponent(debouncedSearch)}&page=${page}&pageSize=${pageSize}`,
+    )
       .then((resp) => {
+        setTotal(resp.total);
         setTableRows(
           resp.items.map((item, index) => ({
+            uuid: item.id,
             id: item.patient_code,
             name: `${item.first_name} ${item.last_name}`,
             phone: item.mobile,
-            age: String(Math.max(0, new Date().getFullYear() - new Date(item.date_of_birth).getFullYear())),
+            age: calculateAge(item.date_of_birth),
             type: item.gender,
             date: item.date_of_birth,
             initials: `${item.first_name[0] ?? ""}${item.last_name[0] ?? ""}`.toUpperCase(),
-            hue: (["mint", "sky", "lav"] as const)[index % 3]
-          }))
+            hue: (["mint", "sky", "lav"] as const)[index % 3],
+          })),
         );
       })
-      .catch(() => undefined);
-  }, [searchQuery, refreshKey]);
+      .catch(() => setListError("Unable to load patient list. Please check login/session."))
+      .finally(() => setIsLoading(false));
+  }, [debouncedSearch, page, pageSize, refreshKey]);
+
+  function resetCreateForm() {
+    setFormState(initialFormState);
+    setCreateError(null);
+    setRegSelected({});
+  }
+
+  function applyRegistrationSelection() {
+    const selectedId = Object.keys(regSelected).find((id) => regSelected[id]);
+    if (!selectedId) return;
+    const selected = registrationRows.find((row) => row.id === selectedId);
+    if (!selected) return;
+    setFormState({
+      firstName: selected.firstName,
+      lastName: selected.lastName,
+      gender: selected.gender,
+      mobile: selected.mobile,
+      dob: "",
+      age: selected.age,
+      email: selected.email,
+      address: selected.address,
+      city: selected.city,
+      pin: selected.pin,
+      state: selected.state,
+    });
+    setRegSelected({});
+    setModal("create");
+  }
+
+  const stateValue = formState.state.toLowerCase();
 
   return (
     <div className="screen-wrap calendar-screen doc-pat-screen patpage-wrap">
       <section className="patpage-hero-card">
         <div className="patpage-hero-left">
           <p className="patpage-hero-k">TOTAL PATIENTS</p>
-          <p className="patpage-hero-num">12,480</p>
+          <p className="patpage-hero-num">{total.toLocaleString()}</p>
           <div className="patpage-hero-bars">
-            <span className="patpage-bar patpage-bar-a" style={{ width: "8%" }} title="1,000" />
-            <span className="patpage-bar patpage-bar-b" style={{ width: "24%" }} title="3,000" />
-            <span className="patpage-bar patpage-bar-g" style={{ width: "68%" }} title="8,480" />
+            <span className="patpage-bar patpage-bar-a" style={{ width: total ? "15%" : "0%" }} />
+            <span className="patpage-bar patpage-bar-b" style={{ width: total ? "35%" : "0%" }} />
+            <span className="patpage-bar patpage-bar-g" style={{ width: total ? "50%" : "0%" }} />
           </div>
           <div className="patpage-hero-legend">
-            <span>1,000</span>
-            <span>3,000</span>
-            <span>8,480</span>
+            <span>{Math.max(0, Math.floor(total * 0.15)).toLocaleString()}</span>
+            <span>{Math.max(0, Math.floor(total * 0.35)).toLocaleString()}</span>
+            <span>{Math.max(0, Math.floor(total * 0.5)).toLocaleString()}</span>
           </div>
         </div>
         <Users size={40} strokeWidth={1.5} className="patpage-hero-icon" aria-hidden />
@@ -142,16 +238,22 @@ export function PatientsDirectoryPage() {
           <div className="patpage-quick">
             <div>
               <span className="patpage-quick-k">ACTIVE PATIENTS</span>
-              <strong>1,284</strong>
-              <span className="patpage-pill-up">+2.4%</span>
+              <strong>{total.toLocaleString()}</strong>
             </div>
             <div>
               <span className="patpage-quick-k">VISITS TODAY</span>
-              <strong>42</strong>
+              <strong>{tableRows.length}</strong>
             </div>
           </div>
         </div>
-        <button type="button" className="pill-btn dark pill-btn-navy patpage-new" onClick={() => setModal("create")}>
+        <button
+          type="button"
+          className="pill-btn dark pill-btn-navy patpage-new"
+          onClick={() => {
+            resetCreateForm();
+            setModal("create");
+          }}
+        >
           + New Patient Registration
         </button>
       </header>
@@ -159,7 +261,11 @@ export function PatientsDirectoryPage() {
       <div className="patpage-toolbar">
         <div className="patpage-search">
           <Search size={17} strokeWidth={2} aria-hidden />
-          <input placeholder="Search by name or ID..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <input
+            placeholder="Search by name or ID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
         <button type="button" className="patpage-filter">
           <SlidersHorizontal size={16} />
@@ -181,13 +287,13 @@ export function PatientsDirectoryPage() {
               <th>PHONE NUMBER</th>
               <th>AGE</th>
               <th>TYPE</th>
-              <th>DATE OF EN</th>
+              <th>DATE OF BIRTH</th>
               <th>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
             {tableRows.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.uuid}>
                 <td className="patpage-mono">{row.id}</td>
                 <td>
                   <div className="patpage-namecell">
@@ -206,7 +312,10 @@ export function PatientsDirectoryPage() {
                     <button type="button" className="patpage-edit" aria-label="Edit">
                       <Pencil size={14} />
                     </button>
-                    <Link to={`/frontdesk/patients/profile/${encodeURIComponent(row.id)}`} className="patpage-view">
+                    <Link
+                      to={`/frontdesk/patients/profile/${encodeURIComponent(row.uuid)}`}
+                      className="patpage-view"
+                    >
                       View Profile
                     </Link>
                   </div>
@@ -215,21 +324,31 @@ export function PatientsDirectoryPage() {
             ))}
           </tbody>
         </table>
+        {isLoading ? <p className="patpage-sub">Loading patients...</p> : null}
+        {listError ? <p className="patpage-sub">{listError}</p> : null}
         <footer className="patpage-pagination">
-          <span>Showing 1 to 5 of 1,284 patients</span>
+          <span>
+            Showing {startIndex} to {endIndex} of {total} patients
+          </span>
           <div className="patpage-pages">
+            <button
+              type="button"
+              className="patpage-page"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </button>
             <button type="button" className="patpage-page patpage-page-on">
-              1
+              {page}
             </button>
-            <button type="button" className="patpage-page">
-              2
-            </button>
-            <button type="button" className="patpage-page">
-              3
-            </button>
-            <span className="patpage-page-ellipsis">…</span>
-            <button type="button" className="patpage-page">
-              129
+            <button
+              type="button"
+              className="patpage-page"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
             </button>
           </div>
         </footer>
@@ -252,29 +371,34 @@ export function PatientsDirectoryPage() {
                   </button>
                 </div>
                 <h2 className="patpage-create-title">Create Patient</h2>
+                {createError ? <p className="patpage-sub">{createError}</p> : null}
                 <form
                   className="patpage-create-form"
                   onSubmit={async (e) => {
                     e.preventDefault();
-                    const form = e.currentTarget;
-                    const formData = new FormData(form);
-                    const firstName = String(formData.get("firstName") ?? "");
-                    const lastName = String(formData.get("lastName") ?? "");
-                    const mobile = String(formData.get("mobile") ?? "");
-                    const dob = String(formData.get("dob") ?? "1990-01-01");
-                    const genderInput = String(formData.get("gender") ?? "Female");
-                    await apiRequest("/patients", {
-                      method: "POST",
-                      body: {
-                        firstName,
-                        lastName,
-                        gender: genderInput,
-                        dateOfBirth: dob,
-                        mobile
-                      }
-                    });
-                    setModal("none");
-                    setRefreshKey((v) => v + 1);
+                    setCreateError(null);
+                    try {
+                      await apiRequest("/patients", {
+                        method: "POST",
+                        body: {
+                          firstName: formState.firstName.trim(),
+                          lastName: formState.lastName.trim(),
+                          gender: formState.gender,
+                          dateOfBirth: formState.dob,
+                          mobile: formState.mobile.trim(),
+                          email: formState.email.trim(),
+                          address: formState.address.trim(),
+                          city: formState.city.trim(),
+                          state: formState.state.trim(),
+                          pin: formState.pin.trim(),
+                        },
+                      });
+                      setModal("none");
+                      setRefreshKey((v) => v + 1);
+                      resetCreateForm();
+                    } catch {
+                      setCreateError("Unable to create patient. Check required details and try again.");
+                    }
                   }}
                 >
                   <div className="patpage-form-grid patpage-form-3">
@@ -287,18 +411,33 @@ export function PatientsDirectoryPage() {
                     <label className="patpage-lbl">
                       Gender <span className="patpage-req">*</span>
                     </label>
-                    <input className="popup-field" placeholder="Fatima" required name="firstName" />
-                    <input className="popup-field" placeholder="Khan" required name="lastName" />
+                    <input
+                      className="popup-field"
+                      placeholder="Fatima"
+                      required
+                      value={formState.firstName}
+                      onChange={(e) => setFormState((s) => ({ ...s, firstName: e.target.value }))}
+                    />
+                    <input
+                      className="popup-field"
+                      placeholder="Khan"
+                      required
+                      value={formState.lastName}
+                      onChange={(e) => setFormState((s) => ({ ...s, lastName: e.target.value }))}
+                    />
                     <div className="patpage-radios">
-                      <label>
-                        <input type="radio" name="gender" value="Female" defaultChecked /> Female
-                      </label>
-                      <label>
-                        <input type="radio" name="gender" value="Male" /> Male
-                      </label>
-                      <label>
-                        <input type="radio" name="gender" value="Other" /> Other
-                      </label>
+                      {(["Female", "Male", "Other"] as const).map((gender) => (
+                        <label key={gender}>
+                          <input
+                            type="radio"
+                            name="gender"
+                            value={gender}
+                            checked={formState.gender === gender}
+                            onChange={() => setFormState((s) => ({ ...s, gender }))}
+                          />{" "}
+                          {gender}
+                        </label>
+                      ))}
                     </div>
                   </div>
                   <div className="patpage-form-grid patpage-form-4">
@@ -316,32 +455,108 @@ export function PatientsDirectoryPage() {
                     </label>
                     <div className="patpage-field-ico">
                       <Phone size={14} />
-                      <input placeholder="+91 1212093000" name="mobile" />
+                      <input
+                        placeholder="+91 1212093000"
+                        required
+                        minLength={8}
+                        value={formState.mobile}
+                        onChange={(e) => setFormState((s) => ({ ...s, mobile: e.target.value }))}
+                      />
                     </div>
                     <div className="patpage-field-ico">
                       <CalendarDays size={14} />
-                      <input placeholder="1990-01-01" name="dob" />
+                      <input
+                        type="date"
+                        required
+                        value={formState.dob}
+                        onChange={(e) =>
+                          setFormState((s) => ({
+                            ...s,
+                            dob: e.target.value,
+                            age: calculateAge(e.target.value),
+                          }))
+                        }
+                      />
                     </div>
-                    <input className="popup-field" placeholder="34" />
+                    <input
+                      className="popup-field"
+                      placeholder="34"
+                      required
+                      inputMode="numeric"
+                      pattern="[0-9]+"
+                      value={formState.age}
+                      onChange={(e) =>
+                        setFormState((s) => ({
+                          ...s,
+                          age: e.target.value.replace(/\D/g, ""),
+                        }))
+                      }
+                    />
                     <div className="patpage-field-ico">
                       <Mail size={14} />
-                      <input placeholder="emily.davis@example.com" />
+                      <input
+                        type="email"
+                        required
+                        placeholder="emily.davis@example.com"
+                        value={formState.email}
+                        onChange={(e) => setFormState((s) => ({ ...s, email: e.target.value }))}
+                      />
                     </div>
                   </div>
                   <label className="patpage-lbl patpage-lbl-full">
                     Address <span className="patpage-req">*</span>
                   </label>
-                  <textarea className="patpage-textarea" rows={3} placeholder="1-8-538/8/c, 3rd floor, chikkadpally..." />
+                  <textarea
+                    className="patpage-textarea"
+                    rows={3}
+                    required
+                    placeholder="1-8-538/8/c, 3rd floor, chikkadpally..."
+                    value={formState.address}
+                    onChange={(e) => setFormState((s) => ({ ...s, address: e.target.value }))}
+                  />
                   <div className="patpage-form-grid patpage-form-3">
-                    <label className="patpage-lbl">City</label>
-                    <label className="patpage-lbl">Pin code</label>
-                    <label className="patpage-lbl">State</label>
-                    <input className="popup-field" placeholder="Hyderabad" />
-                    <input className="popup-field" placeholder="500020" />
-                    <select className="popup-field" defaultValue="ts">
-                      <option value="ts">Telangana</option>
-                      <option value="ka">Karnataka</option>
-                      <option value="mh">Maharashtra</option>
+                    <label className="patpage-lbl">
+                      City <span className="patpage-req">*</span>
+                    </label>
+                    <label className="patpage-lbl">
+                      Pin code <span className="patpage-req">*</span>
+                    </label>
+                    <label className="patpage-lbl">
+                      State <span className="patpage-req">*</span>
+                    </label>
+                    <input
+                      className="popup-field"
+                      placeholder="Hyderabad"
+                      required
+                      value={formState.city}
+                      onChange={(e) => setFormState((s) => ({ ...s, city: e.target.value }))}
+                    />
+                    <input
+                      className="popup-field"
+                      placeholder="500020"
+                      required
+                      inputMode="numeric"
+                      pattern="[0-9]+"
+                      value={formState.pin}
+                      onChange={(e) =>
+                        setFormState((s) => ({
+                          ...s,
+                          pin: e.target.value.replace(/\D/g, ""),
+                        }))
+                      }
+                    />
+                    <select
+                      className="popup-field"
+                      value={stateValue}
+                      required
+                      onChange={(e) => setFormState((s) => ({ ...s, state: e.target.value }))}
+                    >
+                      <option value="" disabled>
+                        Select state
+                      </option>
+                      <option value="telangana">Telangana</option>
+                      <option value="karnataka">Karnataka</option>
+                      <option value="maharashtra">Maharashtra</option>
                     </select>
                   </div>
                   <div className="patpage-create-footer">
@@ -382,14 +597,24 @@ export function PatientsDirectoryPage() {
                             <input
                               type="checkbox"
                               checked={!!regSelected[r.id]}
-                              onChange={(e) => setRegSelected((s) => ({ ...s, [r.id]: e.target.checked }))}
+                              onChange={(e) =>
+                                setRegSelected((s) => ({
+                                  ...Object.keys(s).reduce<Record<string, boolean>>((acc, key) => {
+                                    acc[key] = false;
+                                    return acc;
+                                  }, {}),
+                                  [r.id]: e.target.checked,
+                                }))
+                              }
                             />
                           </td>
                           <td>
                             <div className="patpage-reg-name">
                               <span className={`patpage-av patpage-av-${r.hue}`}>{r.initials}</span>
                               <span>
-                                <strong>{r.name}</strong>
+                                <strong>
+                                  {r.firstName} {r.lastName}
+                                </strong>
                                 <small>{r.email}</small>
                               </span>
                             </div>
@@ -407,10 +632,7 @@ export function PatientsDirectoryPage() {
                     type="button"
                     className="pill-btn dark pill-btn-navy"
                     disabled={!regAny}
-                    onClick={() => {
-                      setModal("create");
-                      setRegSelected({});
-                    }}
+                    onClick={applyRegistrationSelection}
                   >
                     <Check size={17} strokeWidth={2.4} />
                     Select and use data

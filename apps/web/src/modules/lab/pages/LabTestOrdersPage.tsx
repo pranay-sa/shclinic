@@ -33,6 +33,7 @@ export function LabTestOrdersPage() {
   const [collectorName, setCollectorName] = useState("");
   const [reportStaff, setReportStaff] = useState("");
   const [ordersData, setOrdersData] = useState<OrderRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiRequest<
@@ -68,7 +69,7 @@ export function LabTestOrdersPage() {
           }))
         )
       )
-      .catch(() => undefined);
+      .catch(() => setError("Unable to load test orders."));
   }, []);
 
   const filteredOrders = useMemo(() => ordersData, [ordersData]);
@@ -152,6 +153,7 @@ export function LabTestOrdersPage() {
           </article>
         ))}
       </div>
+      {error ? <p className="lab-login-note">{error}</p> : null}
 
       {dialog !== "none" ? <button type="button" className="lab-dialog-backdrop" onClick={() => setDialog("none")} /> : null}
 
