@@ -81,10 +81,6 @@ app.use(helmet());
 app.use(cors({ origin: env.API_CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 
-app.get("/", (_req, res) => {
-  res.json({ ok: true, message: "Clinic API is running", health: "/health" });
-});
-
 app.get("/health", async (_req, res) => {
   await db.query("SELECT 1");
   res.json({ ok: true, ts: new Date().toISOString() });
