@@ -3,20 +3,17 @@ import { z } from "zod";
 
 dotenv.config();
 
-const apiPort = process.env.API_PORT ?? process.env.PORT ?? "4000";
+const listenTargetRaw = process.env.PORT ?? process.env.API_PORT ?? "4000";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  API_PORT: z.coerce.number(),
+  API_PORT: z.coerce.number().optional(),
   API_CORS_ORIGIN: z.string().default("http://localhost:5173"),
   JWT_SECRET: z.string().min(16),
   DATABASE_URL: z.string().url()
 });
 
-const parsed = envSchema.safeParse({
-  ...process.env,
-  API_PORT: apiPort
-});
+const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
   throw new Error(`Invalid API environment: ${parsed.error.message}`);
@@ -24,3 +21,7 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 export const isProd = env.NODE_ENV === "production";
+
+export const listenTarget: number | string = /^\d+$/.test(listenTargetRaw)
+  ? Number(listenTargetRaw)
+  : listenTargetRaw;

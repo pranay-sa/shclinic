@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { env } from "./config.js";
+import { listenTarget } from "./config.js";
 import { db } from "./db.js";
 import { app } from "./app.js";
 import { setupRealtime } from "./realtime.js";
@@ -7,8 +7,9 @@ import { setupRealtime } from "./realtime.js";
 const httpServer = createServer(app);
 setupRealtime(httpServer);
 
-httpServer.listen(env.API_PORT, () => {
-  console.log(`API running on http://localhost:${env.API_PORT}`);
+httpServer.listen(listenTarget, () => {
+  const host = typeof listenTarget === "number" ? `http://localhost:${listenTarget}` : listenTarget;
+  console.log(`API running on ${host}`);
 });
 
 async function shutdown(signal: string) {
